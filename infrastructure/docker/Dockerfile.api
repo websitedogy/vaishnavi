@@ -1,0 +1,132 @@
+# Multi-stage Production Dockerfile for DOGY ePAPER SaaS API
+
+# Build Stage: Composer Dependencies
+FROM composer:2.7 AS vendor
+WORKDIR /app
+COPY backend/composer.json backend/composer.lock ./
+RUN composer install \
+    --no-dev \
+    --no-interaction \
+    --prefer-dist \
+    --optimize-autoloader \
+    --no-scripts
+
+# Production Stage: PHP 8.2-FPM Alpine
+FROM php:8.2-fpm-alpine
+
+# Set working directory
+WORKDIR /var/www/html
+
+# Install system dependencies, Ghostscript, and image libraries
+RUN apk add --no-cache \
+    nginx \
+    supervisor \
+    curl \
+    git \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    freetype-dev \
+    libzip-dev \
+    zip \
+    unzip \
+    ghostscript \
+    imagemagick \
+    imagemagick-dev \
+    oniguruma-dev \
+    libxml2-dev
+
+# Configure and install PHP extensions
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) \
+        pdo \
+        pdo_mysql \
+        mbstring \
+        exif \
+        pcntl \
+        bcmath \
+        gd \
+        zip \
+        opcache
+
+# Copy OPcache configuration
+COPY <<EOF /usr/local/etc/php/conf.d/opcache.ini
+[opcache]
+opcache.enable=1
+opcache.enable_cli=1
+opcache.memory_consumption=256
+opcache.interned_strings_buffer=16
+opcache.max_accelerated_files=20000
+opcache.validate_timestamps=0
+opcache.save_comments=1
+opcache.fast_shutdown=1
+EOF
+
+# Copy Nginx configuration
+COPY <<EOF /etc/nginx/http.d/default.conf
+server {
+    listen 80;
+    server_name _;
+    root /var/www/html/public;
+    index index.php index.html;
+
+    client_max_body_size 100M;
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$query_string;
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass 127.0.0.1:9000;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+    location /api/health {
+        access_log off;
+        return 200 '{"status":"healthy","service":"api"}';
+        add_header Content-Type application/json;
+    }
+}
+EOF
+
+# Copy Supervisor configuration
+COPY <<EOF /etc/supervisor/conf.d/supervisord.conf
+[supervisord]
+nodaemon=true
+user=root
+logfile=/var/log/supervisord.log
+pidfile=/var/run/supervisord.pid
+
+[program:php-fpm]
+command=php-fpm -F
+autostart=true
+autorestart=true
+priority=5
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+
+[program:nginx]
+command=nginx -g "daemon off;"
+autostart=true
+autorestart=true
+priority=10
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+EOF
+
+# Copy application source & vendor
+COPY backend /var/www/html
+COPY --from=vendor /app/vendor /var/www/html/vendor
+
+# Set permissions
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
+    && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+
+EXPOSE 80
+
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

@@ -1,0 +1,2 @@
+# Public View Frontend Module
+**STATUS: RESERVED FOR FUTURE DEVELOPMENT**

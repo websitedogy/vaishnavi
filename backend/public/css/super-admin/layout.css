@@ -1,0 +1,42 @@
+/**
+ * Super Admin — app shell (sidebar + main column)
+ */
+
+:root {
+    --sa-brand-50: #eff6ff;
+    --sa-brand-500: #3b82f6;
+    --sa-brand-600: #2563eb;
+    --sa-brand-700: #1d4ed8;
+    --sa-brand-900: #1e3a5f;
+    --sa-sidebar-width: 16rem;
+    --sa-header-height: 4rem;
+}
+
+.sa-app {
+    min-height: 100%;
+    display: flex;
+}
+
+.sa-main-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.sa-main-content {
+    flex: 1;
+    padding: 1rem;
+}
+
+@media (min-width: 640px) {
+    .sa-main-content {
+        padding: 1.5rem;
+    }
+}
+
+@media (min-width: 1024px) {
+    .sa-main-content {
+        padding: 2rem;
+    }
+}

@@ -1,0 +1,67 @@
+/* DOGY ePAPER SaaS - Public View Module Stylesheet */
+
+:root {
+  --brand-primary: #1E3A8A;
+  --brand-secondary: #0284C7;
+  --brand-font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --reader-bg: #0F172A;
+  --reader-toolbar-bg: rgba(15, 23, 42, 0.95);
+  --paper-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+.public-newspaper-root {
+  font-family: var(--brand-font);
+  color: #1E293B;
+  background-color: #FFFFFF;
+}
+
+/* Masthead Serif Accent */
+.font-masthead {
+  font-family: 'Playfair Display', 'Merriweather', 'Georgia', serif;
+}
+
+/* Custom Scrollbars for Thumbnails & Pages */
+.reader-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.reader-scrollbar::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+.reader-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 3px;
+}
+.reader-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.7);
+}
+
+/* Canvas Pan & Zoom transitions */
+.canvas-interactive {
+  user-select: none;
+  -webkit-user-drag: none;
+  touch-action: none;
+}
+
+.canvas-interactive.dragging {
+  cursor: grab;
+}
+
+.canvas-interactive.is-active-dragging {
+  cursor: grabbing;
+}
+
+/* Pulse Skeleton */
+@keyframes pulse-skeleton {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.skeleton-box {
+  animation: pulse-skeleton 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  background-color: #E2E8F0;
+}

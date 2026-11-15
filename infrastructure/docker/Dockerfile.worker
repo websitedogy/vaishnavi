@@ -1,0 +1,57 @@
+# Production Dockerfile for High-Throughput Newspaper PDF Processing Workers
+
+FROM php:8.2-cli-alpine
+
+WORKDIR /var/www/html
+
+# Install Ghostscript, Poppler-utils (pdftoppm), ImageMagick, and build tools
+RUN apk add --no-cache \
+    ghostscript \
+    poppler-utils \
+    imagemagick \
+    imagemagick-dev \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    freetype-dev \
+    libzip-dev \
+    supervisor \
+    curl \
+    git \
+    zip \
+    unzip
+
+# Install PHP extensions
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) \
+        pdo \
+        pdo_mysql \
+        bcmath \
+        gd \
+        zip \
+        pcntl \
+        exif
+
+# Copy vendor from API or build
+COPY backend /var/www/html
+
+# Worker Supervisor Configuration
+COPY <<EOF /etc/supervisor/conf.d/worker.conf
+[supervisord]
+nodaemon=true
+user=root
+
+[program:laravel-sqs-worker]
+process_name=%(program_name)s_%(process_num)02d
+command=php /var/www/html/artisan queue:work sqs --sleep=3 --tries=3 --max-time=3600 --timeout=300
+autostart=true
+autorestart=true
+stopasgroup=true
+killasgroup=true
+user=root
+numprocs=4
+redirect_stderr=true
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+EOF
+
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/worker.conf"]

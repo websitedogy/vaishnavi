@@ -1,0 +1,102 @@
+name: Production CI/CD - DOGY ePAPER Super Admin
+
+on:
+  push:
+    branches: [ main, production ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REPOSITORY_API: dogy-api
+  ECR_REPOSITORY_WORKER: dogy-worker
+  ECS_CLUSTER: dogy-epaper-saas-ecs-cluster
+  ECS_SERVICE_API: dogy-epaper-saas-api-service
+
+jobs:
+  # Job 1: Automated PHPUnit Backend Test Suite
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP 8.2
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_sqlite, pdo_mysql, zip, gd, fileinfo, imagick
+          coverage: none
+
+      - name: Install Composer Dependencies
+        run: |
+          cd backend
+          composer install --prefer-dist --no-progress
+
+      - name: Run Super Admin Enterprise Test Suite
+        run: |
+          cd backend
+          php artisan test --filter=SuperAdminApiTest
+
+  # Job 2: Frontend Lint & Build
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Frontend Dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build Next.js Super Admin
+        run: |
+          cd frontend
+          npm run build
+
+  # Job 3: Build & Deploy to AWS ECS Fargate
+  deploy-production:
+    needs: [backend-tests, frontend-build]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, Tag, and Push Docker Images
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Build API
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_API:$IMAGE_TAG -f infrastructure/docker/Dockerfile.api .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY_API:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY_API:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_API:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_API:latest
+
+          # Build Worker
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_WORKER:$IMAGE_TAG -f infrastructure/docker/Dockerfile.worker .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY_WORKER:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY_WORKER:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_WORKER:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY_WORKER:latest
+
+      - name: Deploy to Amazon ECS Fargate
+        run: |
+          aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE_API --force-new-deployment
